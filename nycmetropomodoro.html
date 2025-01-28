@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pomodoro metro timer</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Doto:wght@400;700&display=swap');
+
+    body {
+      font-family: 'Doto', sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #fafafa;
+      color: #fff;
+    }
+    .title {
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 2rem;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .title span {
+      display: inline-block;
+      padding: 0 5px;
+    }
+    .title .red {
+      color: #b31515;
+    }
+    .title .green {
+      color: #3ba61e;
+    }
+    .title .yellow {
+      color: #e6ce1e;
+    }
+    .container {
+      text-align: center;
+      background: #222;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+      min-width: 1000px;
+      max-width: 95%
+    }
+    .horizontal-task-list {
+      display: flex;
+      gap: 10px;
+      margin-top: 70px;
+      height: 150px;
+      padding-top: 45px;
+      overflow-x: auto;
+      padding-left: 25px;
+      min-width: 1000px;
+      max-width: 95%
+    }
+    .task {
+      background: #222;
+      padding: 10px;
+      border-radius: 5px;
+      min-width: 100px;
+      max-height: 50px;
+      text-align: bottom;
+      position: relative;
+      transform: rotate(330deg);
+      overflow: visible;
+      transform-origin: bottom center;
+      transition: opacity 0.1s ease-in-out;
+    }
+    .task input {
+      background: transparent;
+      border: none;
+      text-align: center;
+      width: 100%;
+      margin-bottom: 5px;
+      font-family: inherit;
+      font-size: 1rem;
+    }
+    .task .task-name {
+      color: #ff0; /* Yellow for task name */
+    }
+    .task .task-time {
+      color: #0f0; /* Green for task time */
+      font-size: 1.2rem;
+      font-weight: bold;
+      text-align: center;
+    }
+    .task .remove-task {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      background: red;
+      border: none;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .current-task {
+      border: 2px dotted #ff4d4d;
+    }
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .controls button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 5px;
+      background-color: #444;
+      color: #fff;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      font-family: 'Doto', sans-serif;
+    }
+    .controls button:hover {
+      background-color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <div class="title">
+      <span class="red">nyc</span>
+      <span class="green">metro</span>
+      <span class="yellow">timer</span>
+    </div>
+    <div class="container">
+      <div class="horizontal-task-list" id="horizontal-task-list">
+        <!-- Initial empty slots for tasks -->
+      </div>
+      <div class="controls">
+        <button id="add-task">add task</button>
+        <button id="start">start</button>
+        <button id="pause">pause</button>
+        <button id="reset">reset</button>
+        <button id="next">skip</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const taskList = document.getElementById('horizontal-task-list');
+    const addTaskButton = document.getElementById('add-task');
+    const startButton = document.getElementById('start');
+    const pauseButton = document.getElementById('pause');
+    const resetButton = document.getElementById('reset');
+    const nextButton = document.getElementById('next');
+
+    let currentTaskIndex = 0;
+    let timerInterval = null;
+    let timeRemaining = 0;
+    let timerPaused = true;
+
+    function markCurrentTask() {
+      document.querySelectorAll('.task').forEach((task, index) => {
+        task.classList.toggle('current-task', index === currentTaskIndex);
+      });
+    }
+
+    function addTask() {
+      const taskIndex = document.querySelectorAll('.task').length;
+      const taskElement = document.createElement('div');
+      taskElement.className = 'task';
+      taskElement.dataset.index = taskIndex;
+      taskElement.innerHTML = `
+        <input type="text" class="task-name" placeholder="Task Name">
+        <div class="task-time" contenteditable="true">mm:ss</div>
+        <button class="remove-task">x</button>
+      `;
+      taskList.appendChild(taskElement);
+      markCurrentTask();
+    }
+
+    function parseTimeInput(input) {
+      const parts = input.split(":").map(Number);
+      if (parts.length === 1) {
+        return [parts[0], 0]; // Treat input as minutes if only one number is provided
+      }
+      return parts;
+    }
+
+    function removeTask(index) {
+      const task = document.querySelector(`.task[data-index="${index}"]`);
+      task.remove();
+      const remainingTasks = [...document.querySelectorAll('.task')];
+      remainingTasks.forEach((task, i) => {
+        task.dataset.index = i;
+      });
+      if (currentTaskIndex >= remainingTasks.length) {
+        currentTaskIndex = remainingTasks.length - 1;
+      }
+      markCurrentTask();
+    }
+
+    taskList.addEventListener('click', (event) => {
+      if (event.target.classList.contains('remove-task')) {
+        const index = parseInt(event.target.parentElement.dataset.index, 10);
+        removeTask(index);
+      }
+    });
+
+    function updateTimerDisplay() {
+      const currentTask = document.querySelector(`.task[data-index="${currentTaskIndex}"]`);
+      if (currentTask) {
+        const minutes = Math.floor(timeRemaining / 60);
+        const seconds = timeRemaining % 60;
+        currentTask.querySelector('.task-time').textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      }
+    }
+
+    function startTimer() {
+      const currentTask = document.querySelector(`.task[data-index="${currentTaskIndex}"]`);
+      if (!currentTask) return;
+
+      const timeInput = currentTask.querySelector('.task-time').textContent;
+      const [minutes, seconds] = parseTimeInput(timeInput);
+      timeRemaining = (minutes || 0) * 60 + (seconds || 0);
+      timerPaused = false;
+
+      if (!timerInterval) {
+        timerInterval = setInterval(() => {
+          if (timeRemaining > 0) {
+            timeRemaining--;
+            updateTimerDisplay();
+          } else {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            removeAndShiftTasks();
+          }
+        }, 1000);
+      }
+    }
+
+    function removeAndShiftTasks() {
+      const tasks = document.querySelectorAll('.task');
+      tasks.forEach(task => {
+        task.style.opacity = 0; // Fade out
+      });
+
+      setTimeout(() => {
+        tasks.forEach(task => task.remove());
+
+        setTimeout(() => {
+          const remainingTasks = [...tasks].slice(1); // Shift tasks
+          remainingTasks.forEach((task, i) => {
+            task.style.opacity = 0; // Initially invisible
+            task.dataset.index = i;
+            taskList.appendChild(task);
+          });
+
+          setTimeout(() => {
+            remainingTasks.forEach(task => {
+              task.style.opacity = 1; // Fade in
+            });
+
+            if (remainingTasks.length > 0) {
+              currentTaskIndex = 0;
+              markCurrentTask();
+              startTimer(); // Start the next task
+            }
+          }, 100); // Fade-in duration
+        }, 500); // Pause duration
+      }, 100); // Fade-out duration
+    }
+
+    function pauseTimer() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      timerPaused = true;
+    }
+
+    function skipTask() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      removeAndShiftTasks();
+    }
+
+    function resetTimer() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      currentTaskIndex = 0;
+      timerPaused = true;
+      markCurrentTask();
+    }
+
+    addTaskButton.addEventListener('click', addTask);
+    startButton.addEventListener('click', startTimer);
+    pauseButton.addEventListener('click', pauseTimer);
+    resetButton.addEventListener('click', resetTimer);
+    nextButton.addEventListener('click', skipTask);
+
+    markCurrentTask();
+  </script>
+</body>
+</html>
